@@ -40,16 +40,16 @@ export interface Settings {
 }
 
 export interface DatabaseInterface {
-  isValid(): boolean
-  init(settings: Settings, concepts: TypedConcept<unknown>[]): void
-  getConcept(id: ConceptId): TypedConcept<unknown> | undefined
-  getAllConcepts(): TypedConcept<unknown>[]
+  isValid(): Promise<boolean>
+  init(settings: Settings, concepts: TypedConcept<unknown>[]): Promise<void>
+  getConcept(id: ConceptId): Promise<TypedConcept<unknown> | undefined>
+  getAllConcepts(): Promise<TypedConcept<unknown>[]>
   createConcept(concept: TypedConcept<unknown>): void
   updateConcept(concept: TypedConcept<unknown>): void
   getSettings(): Settings
   saveSettings(settings: Settings): void
   getLastUpdatedTime(): number
-  getVersion(): number
+  getVersion(): Promise<number>
   setVersion(number: number): void
   subscribeConcept: (channel: string, callback: () => void) => void
   unsubscribeConcept: (channel: string, callback: () => void) => void
@@ -60,3 +60,4 @@ export type PlatformDatabaseInterface = Omit<
   DatabaseInterface,
   'searchConceptByText'
 >
+

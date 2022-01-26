@@ -132,32 +132,37 @@ function createDatabase(path: string): PlatformDatabaseInterface {
     VALUES (@key, @value)`)
 
   function isValid() {
-    try {
-      const row = selectSetting.get({ key: 'JADE_DB_LOADED' })
-      return !!row
-    } catch (error) {
-      log(error)
-      return false
-    }
+    return new Promise<boolean>(resolve => {
+      try {
+        const row = selectSetting.get({ key: 'JADE_DB_LOADED' })
+        resolve(!!row)
+      } catch (error) {
+        log(error)
+        resolve(false)
+      }
+    })
   }
 
   function init(settings: Settings, concepts: TypedConcept<unknown>[]) {
-    log('Init')
-    db.transaction(() => {
-      settingsCache = settings
-      insertSetting.run({ key: 'settings', value: JSON.stringify(settings) })
-      insertSetting.run({ key: 'JADE_DB_LOADED', value: 'yes' })
-      insertSetting.run({
-        key: 'JADE_DB_VER',
-        value: env.JADE_DB_VER.toString(),
-      })
-      for (let i = 0; i < concepts.length; ++i) {
-        const c = concepts[i]
-        conceptCache.set(c.id, c)
-        conceptStmt.create.run({ id: c.id, json: JSON.stringify(c) })
-      }
-    })() // Transaction must be called!
-    lastUpdatedTime = Date.now()
+    return new Promise<void>(resolve => {
+      log('Init')
+      db.transaction(() => {
+        settingsCache = settings
+        insertSetting.run({ key: 'settings', value: JSON.stringify(settings) })
+        insertSetting.run({ key: 'JADE_DB_LOADED', value: 'yes' })
+        insertSetting.run({
+          key: 'JADE_DB_VER',
+          value: env.JADE_DB_VER.toString(),
+        })
+        for (let i = 0; i < concepts.length; ++i) {
+          const c = concepts[i]
+          conceptCache.set(c.id, c)
+          conceptStmt.create.run({ id: c.id, json: JSON.stringify(c) })
+        }
+      })() // Transaction must be called!
+      lastUpdatedTime = Date.now()
+      resolve()
+    })
   }
 
   function commitBuffer() {
@@ -233,41 +238,45 @@ function createDatabase(path: string): PlatformDatabaseInterface {
   }
 
   function getConcept(id: string) {
-    if (conceptCache.has(id)) return conceptCache.get(id)
-    try {
-      const start = performance.now()
-      const stmt = conceptStmt.select
-      const dryConcept = stmt.get<DryConcept>({ id })
-      const mid = performance.now()
-      const concept = hydrateConcept(dryConcept)
-      if (concept) conceptCache.set(id, concept)
-      const end = performance.now()
-      log(`Select concept "${id}" in ${mid - start}ms, \
+    return new Promise<TypedConcept<unknown> | undefined>(resolve => {
+      if (conceptCache.has(id)) resolve(conceptCache.get(id))
+      try {
+        const start = performance.now()
+        const stmt = conceptStmt.select
+        const dryConcept = stmt.get<DryConcept>({ id })
+        const mid = performance.now()
+        const concept = hydrateConcept(dryConcept)
+        if (concept) conceptCache.set(id, concept)
+        const end = performance.now()
+        log(`Select concept "${id}" in ${mid - start}ms, \
 parse JSON in ${end - mid}ms.`)
-      return concept
-    } catch (err) {
-      error(err)
-      return undefined
-    }
+        resolve(concept)
+      } catch (err) {
+        error(err)
+        resolve(undefined)
+      }
+    })
   }
 
-  function getAllConcepts(): TypedConcept<unknown>[] {
-    const start = performance.now()
-    try {
-      const stmt = conceptStmt.selectAll
-      const dryConcepts = stmt.all<DryConcept>()
-      const end = performance.now()
-      log(`Select all concepts in ${end - start} ms`)
-      const concepts: TypedConcept<unknown>[] = []
-      dryConcepts.forEach(c => {
-        const concept = hydrateConcept(c)
-        if (concept) concepts.push(concept)
-      })
-      return concepts
-    } catch (err) {
-      error(err)
-      return []
-    }
+  function getAllConcepts() {
+    return new Promise<TypedConcept<unknown>[]>(resolve => {
+      const start = performance.now()
+      try {
+        const stmt = conceptStmt.selectAll
+        const dryConcepts = stmt.all<DryConcept>()
+        const end = performance.now()
+        log(`Select all concepts in ${end - start} ms`)
+        const concepts: TypedConcept<unknown>[] = []
+        dryConcepts.forEach(c => {
+          const concept = hydrateConcept(c)
+          if (concept) concepts.push(concept)
+        })
+        resolve(concepts)
+      } catch (err) {
+        error(err)
+        resolve([])
+      }
+    })
   }
 
   function saveConcept(
@@ -314,12 +323,14 @@ parse JSON in ${end - mid}ms.`)
     return lastUpdatedTime
   }
 
-  function getVersion(): number {
-    const row = selectSetting.get<{ key: string; value: string }>({
-      key: 'JADE_DB_VER',
+  function getVersion() {
+    return new Promise<number>(resolve => {
+      const row = selectSetting.get<{ key: string; value: string }>({
+        key: 'JADE_DB_VER',
+      })
+      const ver = parseInt(row?.value)
+      resolve(ver)
     })
-    const ver = parseInt(row?.value)
-    return ver
   }
 
   function setVersion(n: number): void {
@@ -350,3 +361,4 @@ parse JSON in ${end - mid}ms.`)
 }
 
 export const database = createDatabase('jade.db')
+
