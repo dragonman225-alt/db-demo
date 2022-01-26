@@ -88,6 +88,23 @@ const unigraph = createUnigraph(
   userSettings.browserId
 )
 
+interface DryConcept {
+  id: string
+  json: string
+}
+
+function hydrateConcept(
+  dryConcept: DryConcept
+): TypedConcept<unknown> | undefined {
+  try {
+    const concept = JSON.parse(dryConcept.json) as TypedConcept<unknown>
+    return concept.relations ? concept : { ...concept, relations: [] }
+  } catch (error) {
+    console.log(error)
+    return undefined
+  }
+}
+
 export function createDatabase(): PlatformDatabaseInterface {
   return {
     isValid: async () => {
@@ -106,22 +123,25 @@ export function createDatabase(): PlatformDatabaseInterface {
         jadeSettingsSchemaId
       )
 
-      for (let i = 0; i < concepts.length; i++) {
-        const concept = concepts[i]
-        unigraph.addObject(
-          {
-            id: concept.id,
-            json: JSON.stringify(concept),
-          },
-          jadeConceptSchemaId
-        )
-      }
+      unigraph.addObject(
+        concepts.map(c => ({
+          id: c.id,
+          json: JSON.stringify(c),
+        })),
+        jadeConceptSchemaId
+      )
     },
     getConcept: id => {
-      console.log('getConcept', id)
-      if (!unigraph.getObject) throw new Error('Cannot get object')
-      /** I guess this is wrong. */
-      return unigraph.getObject(id)
+      return new Promise(resolve => {
+        console.log('getConcept', id)
+        if (!unigraph.getObject) throw new Error('Cannot get object')
+        const dryConcepts = unigraph.getQueries(
+          `(func: uid(jadeConcept)) { uid type {<unigraph.id>} _value { id { <_value.%> } json { <_value.%> }} } var(func: eq(<id>, "${id}")) { jadeConcept as <~_value> }`
+        ) as { id: string; json: string }[]
+        const dryConcept = dryConcepts[0]
+        const concept = hydrateConcept(dryConcept)
+        resolve(concept)
+      })
     },
     getAllConcepts: () => {
       return new Promise(resolve => {
