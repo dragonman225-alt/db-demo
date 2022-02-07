@@ -105,10 +105,15 @@ function hydrateConcept(
   }
 }
 
+function panicNotImplemented(...args: unknown[]) {
+  console.log('[not implemented]', ...args)
+}
+
 export function createDatabase(): PlatformDatabaseInterface {
   return {
     isValid: async () => {
-      console.log('isValid')
+      panicNotImplemented('isValid')
+      return false // let it init() on every load
       const jadePackageName = jadePackage.pkgManifest.package_name
       const packages = await unigraph.getPackages([jadePackageName])
       return !!packages[jadePackageName]
@@ -131,32 +136,62 @@ export function createDatabase(): PlatformDatabaseInterface {
         jadeConceptSchemaId
       )
     },
-    getConcept: id => {
-      return new Promise(resolve => {
-        console.log('getConcept', id)
-        if (!unigraph.getObject) throw new Error('Cannot get object')
-        const dryConcepts = unigraph.getQueries(
-          `(func: uid(jadeConcept)) { uid type {<unigraph.id>} _value { id { <_value.%> } json { <_value.%> }} } var(func: eq(<id>, "${id}")) { jadeConcept as <~_value> }`
-        ) as { id: string; json: string }[]
-        const dryConcept = dryConcepts[0]
-        const concept = hydrateConcept(dryConcept)
-        resolve(concept)
-      })
+    getConcept: async id => {
+      console.log('getConcept', id)
+      const dryConcepts = (await unigraph.getQueries([
+        `
+(func: uid(jadeConceptUids)) @cascade {
+  uid
+  _value {
+    id @filter(eq(<_value.%>, "${id}"))
+    json { <_value.%> }
+  }
+}
+var (func: eq(<unigraph.id>, "$/schema/jade_concept")) {
+  <~type> {
+    jadeConceptUids as uid
+  }
+}`,
+      ])) as [
+        {
+          uid: string
+          _value: {
+            json: { '_value.%': string }
+          }
+        }[]
+      ]
+      const dryConcept = {
+        id,
+        json: dryConcepts[0][0]._value.json['_value.%'],
+      }
+      console.log(dryConcepts)
+      const concept = hydrateConcept(dryConcept)
+      return concept
     },
     getAllConcepts: () => {
+      panicNotImplemented('getAllConcepts')
       return new Promise(resolve => {
-        /** What should I put inside? */
-        resolve(unigraph.getQueries('') as TypedConcept<unknown>[])
+        resolve([])
       })
     },
     updateConcept: concept => {
-      /** The uid problem, again. */
-      unigraph.updateObject(concept.id, {
-        id: concept.id,
-        json: JSON.stringify(concept),
-      })
+      panicNotImplemented('updateConcept')
+      /** How to get uid? Query it with concept id first? */
+      // unigraph.updateObject(concept.id, {
+      //   id: concept.id,
+      //   json: JSON.stringify(concept),
+      // })
+      /** Can I just add it? Seems to be yes. */
+      unigraph.addObject(
+        {
+          id: concept.id,
+          json: JSON.stringify(concept),
+        },
+        jadeConceptSchemaId
+      )
     },
     createConcept: concept => {
+      console.log('createConcept')
       unigraph.addObject(
         {
           id: concept.id,
@@ -166,26 +201,35 @@ export function createDatabase(): PlatformDatabaseInterface {
       )
     },
     getSettings: () => {
+      panicNotImplemented('getSettings')
       return getDefaultSettings()
     },
     saveSettings: () => {
+      panicNotImplemented('saveSettings')
       return
     },
     /** Unused. */
     getLastUpdatedTime: () => Date.now(),
     getVersion: () => {
+      panicNotImplemented('getVersion')
       return new Promise(resolve => resolve(5))
     },
     setVersion: () => {
       return
     },
     subscribeConcept: (channel, callback) => {
+      panicNotImplemented('subscribeConcept')
       if (channel === '*') return // unused, ignore it
-      unigraph.subscribeToObject(channel, callback).catch(error => {
-        throw error
-      })
+      // unigraph
+      //   .subscribeToObject(channel, result => {
+      //     callback(convertToConcept(result))
+      //   })
+      //   .catch(error => {
+      //     throw error
+      //   })
     },
     unsubscribeConcept: (channel, callback) => {
+      panicNotImplemented('unSubscribeConcept')
       if (channel === '*') return // unused, ignore it
       /** What is a subscription ID? */
       unigraph.unsubscribe(0)
